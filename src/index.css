@@ -1,0 +1,107 @@
+:root {
+  /* ---- Palette: a case-file / inspection-report register, grounded in
+     the actual subject matter (product-safety recalls) rather than a
+     generic crypto-dashboard look. Never reused from this project's own
+     accent-color log. ---- */
+  --paper: #EDEAE2;
+  --paper-raised: #F7F5EF;
+  --ink: #1F2A33;
+  --ink-soft: #4A5661;
+  --ink-faint: #8A9199;
+  --rule: #D8D3C6;
+  --rule-strong: #B7B0A0;
+
+  --amber: #D9A404;
+  --amber-deep: #A87C02;
+  --amber-wash: #FBF0CE;
+
+  --rust: #A13D2C;
+  --rust-wash: #F5E2DD;
+
+  --teal: #2C6E63;
+  --teal-wash: #DEEAE7;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-label: "Archivo Expanded", "Archivo", sans-serif;
+  --font-body: "Archivo", -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --radius-sm: 3px;
+  --radius-md: 5px;
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--ink);
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--amber-wash);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Focus visibility — never suppressed */
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.label {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+}
+
+.mono-figure {
+  font-variant-numeric: tabular-nums;
+}
