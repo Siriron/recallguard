@@ -86,23 +86,31 @@ export function useGenLayer() {
     }
   }, []);
 
-  const getWriteClient = useCallback(async () => {
-    if (!account) throw new Error('Connect a wallet first.');
-    await ensureChain();
-    const client = createClient({
-      chain: studionet,
-      account: account,
-      provider: window.ethereum,
-    });
-    if (typeof client.connect === 'function') {
-      try {
-        await client.connect('studionet');
-      } catch {
-        // defensive — not all SDK versions expose this
+  // Accepts an explicit address so a fresh connect() result can be used
+  // immediately, in the same call, without waiting on a re-render to see
+  // the updated `account` state. Falls back to the current `account`
+  // state for call sites that already know a wallet is connected.
+  const getWriteClient = useCallback(
+    async (explicitAccount) => {
+      const activeAccount = explicitAccount || account;
+      if (!activeAccount) throw new Error('Connect a wallet first.');
+      await ensureChain();
+      const client = createClient({
+        chain: studionet,
+        account: activeAccount,
+        provider: window.ethereum,
+      });
+      if (typeof client.connect === 'function') {
+        try {
+          await client.connect('studionet');
+        } catch {
+          // defensive — not all SDK versions expose this
+        }
       }
-    }
-    return client;
-  }, [account]);
+      return client;
+    },
+    [account]
+  );
 
   const readContract = useCallback(
     async (functionName, args = []) => {
@@ -129,14 +137,19 @@ export function useGenLayer() {
     [getReadClient]
   );
 
+  // `explicitAccount` lets a caller that just called connect() pass the
+  // freshly-returned address straight through, rather than relying on
+  // the `account` state value closed over from a stale render — the
+  // state update from connect() is not guaranteed to be visible yet in
+  // the same synchronous call chain that triggered it.
   const writeContract = useCallback(
-    async (functionName, args = [], value = BigInt(0)) => {
+    async (functionName, args = [], value = BigInt(0), explicitAccount) => {
       if (CONTRACT_ADDRESS === '0x0000000000000000000000000000000000000000') {
         throw new Error(
           'CONTRACT_ADDRESS in src/config/chains.ts is still the placeholder. Deploy the contract and update that constant.'
         );
       }
-      const client = await getWriteClient();
+      const client = await getWriteClient(explicitAccount);
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS,
         functionName,
@@ -159,11 +172,27 @@ export function useGenLayer() {
     [getWriteClient]
   );
 
+  // Single entry point for "connect if needed, then write" flows. Uses
+  // the address connect() just returned directly, rather than the
+  // `account` state — closes the exact gap where a first-time
+  // connect-and-act sequence could otherwise fire a write with a stale
+  // or missing account because the state update from connect() hadn't
+  // been observed yet by the caller's own closure.
+  const connectAndWrite = useCallback(
+    async (functionName, args = [], value = BigInt(0)) => {
+      const activeAccount = account || (await connect());
+      if (!activeAccount) throw new Error('Connect a wallet first.');
+      return writeContract(functionName, args, value, activeAccount);
+    },
+    [account, connect, writeContract]
+  );
+
   return {
     account,
     connecting,
     connect,
     readContract,
     writeContract,
+    connectAndWrite,
   };
 }
