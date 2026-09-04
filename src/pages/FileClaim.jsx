@@ -9,7 +9,7 @@ function toUnixSeconds(dateStr) {
 }
 
 export default function FileClaim() {
-  const { account, connect, writeContract } = useGenLayer();
+  const { account, connectAndWrite } = useGenLayer();
   const navigate = useNavigate();
 
   const [question, setQuestion] = useState('');
@@ -57,17 +57,15 @@ export default function FileClaim() {
       return;
     }
 
-    if (!account) {
-      await connect();
-    }
-
     setSubmitting(true);
     try {
       const now = Math.floor(Date.now() / 1000);
       const participationDeadline = now + Number(participationDays) * 86400;
       const evidenceDeadline = participationDeadline + Number(evidenceDays) * 86400;
 
-      const { txHash } = await writeContract('create_dispute', [
+      // connectAndWrite handles "connect if needed" itself and uses the
+      // freshly-returned address for this write — never a stale closure.
+      const { txHash } = await connectAndWrite('create_dispute', [
         question.trim(),
         description.trim(),
         JSON.stringify(cleanPositions),

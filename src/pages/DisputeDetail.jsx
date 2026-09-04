@@ -35,7 +35,7 @@ function formatOutcomeLabel(outcome) {
 
 export default function DisputeDetail() {
   const { id } = useParams();
-  const { account, connect, readContract, writeContract } = useGenLayer();
+  const { account, readContract, connectAndWrite } = useGenLayer();
 
   const [dispute, setDispute] = useState(null);
   const [evidence, setEvidence] = useState([]);
@@ -43,6 +43,7 @@ export default function DisputeDetail() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null); // which action is in flight
   const [actionMsg, setActionMsg] = useState(null);
+  const [pendingBalance, setPendingBalance] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -63,6 +64,25 @@ export default function DisputeDetail() {
     load();
   }, [load]);
 
+  // Show the connected wallet's claimable balance so "withdraw" isn't a
+  // blind action — this is what the settlement path was missing.
+  const loadBalance = useCallback(async () => {
+    if (!account) {
+      setPendingBalance(null);
+      return;
+    }
+    try {
+      const bal = await readContract('get_balance_of', [account]);
+      setPendingBalance(bal);
+    } catch {
+      setPendingBalance(null);
+    }
+  }, [account, readContract]);
+
+  useEffect(() => {
+    loadBalance();
+  }, [loadBalance]);
+
   const [stakeAmount, setStakeAmount] = useState('1');
   const [stakePositionIdx, setStakePositionIdx] = useState(0);
   const [evidenceRecall, setEvidenceRecall] = useState('');
@@ -70,13 +90,16 @@ export default function DisputeDetail() {
   const [evidencePositionIdx, setEvidencePositionIdx] = useState(0);
   const [evidenceStakeAmount, setEvidenceStakeAmount] = useState('1');
 
-  async function runAction(key, fn) {
+  // `run` receives connectAndWrite directly and calls it itself — this
+  // guarantees every write in this page uses the address a fresh
+  // connect() just returned, never a value captured from a stale render
+  // closure (the exact gap the steward flagged).
+  async function runAction(key, run) {
     setActionMsg(null);
     setBusy(key);
     try {
-      if (!account) await connect();
-      await fn();
-      await load();
+      await run(connectAndWrite);
+      await Promise.all([load(), loadBalance()]);
       setActionMsg({ tone: 'success', text: 'Confirmed.' });
     } catch (err) {
       if (err?.isTimeout) {
@@ -138,6 +161,22 @@ export default function DisputeDetail() {
 
       {actionMsg && <div className={`banner ${actionMsg.tone}`} style={{ marginBottom: '1.5rem' }}>{actionMsg.text}</div>}
 
+      {account && pendingBalance !== null && Number(pendingBalance) > 0 && (
+        <div className="banner info" style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <span>
+            Withdrawable balance for {account.slice(0, 6)}…{account.slice(-4)}:{' '}
+            <strong className="mono-figure">{weiToGen(pendingBalance)} GEN</strong>
+          </span>
+          <button
+            className="btn-primary"
+            disabled={busy === 'withdraw'}
+            onClick={() => runAction('withdraw', (write) => write('withdraw', []))}
+          >
+            {busy === 'withdraw' ? 'Withdrawing…' : 'Withdraw'}
+          </button>
+        </div>
+      )}
+
       <h2 className="section-heading">Positions</h2>
       <div className="position-list">
         {dispute.positions.map((p) => {
@@ -180,8 +219,8 @@ export default function DisputeDetail() {
             className="btn-secondary"
             disabled={busy === 'stake-position'}
             onClick={() =>
-              runAction('stake-position', () =>
-                writeContract('stake_position', [Number(id), stakePositionIdx], genToWei(stakeAmount))
+              runAction('stake-position', (write) =>
+                write('stake_position', [Number(id), stakePositionIdx], genToWei(stakeAmount))
               )
             }
           >
@@ -234,8 +273,8 @@ export default function DisputeDetail() {
                       className="btn-secondary"
                       disabled={busy === `stake-evidence-${ev.id}`}
                       onClick={() =>
-                        runAction(`stake-evidence-${ev.id}`, () =>
-                          writeContract('stake_evidence', [ev.id], genToWei(evidenceStakeAmount))
+                        runAction(`stake-evidence-${ev.id}`, (write) =>
+                          write('stake_evidence', [ev.id], genToWei(evidenceStakeAmount))
                         )
                       }
                     >
@@ -283,8 +322,8 @@ export default function DisputeDetail() {
             className="btn-secondary"
             disabled={busy === 'submit-evidence'}
             onClick={() =>
-              runAction('submit-evidence', () =>
-                writeContract(
+              runAction('submit-evidence', (write) =>
+                write(
                   'submit_evidence',
                   [Number(id), evidencePositionIdx, evidenceRecall.trim(), evidenceSummary.trim()],
                   genToWei(evidenceStakeAmount)
@@ -307,7 +346,7 @@ export default function DisputeDetail() {
           <button
             className="btn-primary"
             disabled={busy === 'adjudicate'}
-            onClick={() => runAction('adjudicate', () => writeContract('request_adjudication', [Number(id)]))}
+            onClick={() => runAction('adjudicate', (write) => write('request_adjudication', [Number(id)]))}
           >
             {busy === 'adjudicate' ? 'Adjudicating…' : 'Request adjudication'}
           </button>
@@ -321,7 +360,7 @@ export default function DisputeDetail() {
               key={p.index}
               className="btn-secondary"
               disabled={busy === `claim-pos-${p.index}`}
-              onClick={() => runAction(`claim-pos-${p.index}`, () => writeContract('claim_position', [Number(id), p.index]))}
+              onClick={() => runAction(`claim-pos-${p.index}`, (write) => write('claim_position', [Number(id), p.index]))}
             >
               Claim position stake ({p.label.slice(0, 24)}{p.label.length > 24 ? '…' : ''})
             </button>
@@ -331,7 +370,7 @@ export default function DisputeDetail() {
               key={ev.id}
               className="btn-secondary"
               disabled={busy === `claim-ev-${ev.id}`}
-              onClick={() => runAction(`claim-ev-${ev.id}`, () => writeContract('claim_evidence', [ev.id]))}
+              onClick={() => runAction(`claim-ev-${ev.id}`, (write) => write('claim_evidence', [ev.id]))}
             >
               Claim evidence stake (#{ev.recall_number})
             </button>
